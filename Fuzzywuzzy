@@ -1,0 +1,55 @@
+import pandas as pd
+from fuzzywuzzy import process
+
+# Load the datasets
+df = pd.read_csv('territory_processed.csv')
+
+# Standardize the src_sys_cd values by removing prefixes like 'sf_'
+df['src_sys_cd'] = df['src_sys_cd'].str.replace('sf_', '', regex=False)
+
+# Filter data for each src_sys_cd type
+df_lsg = df[df['src_sys_cd'] == 'lsg'].drop(columns=['reporting_country'])
+df_lpg = df[df['src_sys_cd'] == 'lpg'].drop(columns=['reporting_country'])
+
+# Standardize city and state names to lowercase
+df_lsg['reporting_city'] = df_lsg['reporting_city'].str.lower().str.strip()
+df_lsg['reporting_state'] = df_lsg['reporting_state'].str.lower().str.strip()
+df_lpg['reporting_city'] = df_lpg['reporting_city'].str.lower().str.strip()
+df_lpg['reporting_state'] = df_lpg['reporting_state'].str.lower().str.strip()
+
+# Create a set of unique city-state pairs from lsg
+lsg_city_state = set(zip(df_lsg['reporting_city'], df_lsg['reporting_state']))
+
+# Function to find the best match for a given city-state pair
+def find_best_match(city, state, choices, threshold=90):
+    best_match = None
+    highest_score = 0
+    for choice in choices:
+        city_score = process.extractOne(city, [choice[0]])[1]
+        state_score = process.extractOne(state, [choice[1]])[1]
+        avg_score = (city_score + state_score) / 2
+        if avg_score > highest_score and avg_score >= threshold:
+            highest_score = avg_score
+            best_match = choice
+    return best_match, highest_score
+
+# Find matches for lpg entries in lsg
+matches = []
+for _, row in df_lpg.iterrows():
+    city = row['reporting_city']
+    state = row['reporting_state']
+    match, score = find_best_match(city, state, lsg_city_state)
+    if match:
+        matches.append({
+            'lpg_reporting_city': city,
+            'lpg_reporting_state': state,
+            'matched_lsg_city': match[0],
+            'matched_lsg_state': match[1],
+            'similarity_score': score
+        })
+
+# Convert matches to DataFrame
+df_matches = pd.DataFrame(matches)
+
+# Save to CSV
+df_matches.to_csv('mapped_reporting_cities.csv', index=False)
