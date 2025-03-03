@@ -1,0 +1,111 @@
+##markov chain and apirori 
+
+import pandas as pd
+import numpy as np
+from itertools import permutations
+from mlxtend.frequent_patterns import apriori, association_rules
+from collections import defaultdict
+
+# Step 1: Generate Random Data
+def generate_data(n_customers=1000, n_techniques=4):
+    np.random.seed(42)
+    techniques = {
+        'S1': 'Cloning',
+        'S2': 'Expression',
+        'S3': 'Purification',
+        'S4': 'Analysis'
+    }
+    data = []
+    
+    for customer in range(1, n_customers+1):
+        segment = 'Biotech'
+        sequence_length = np.random.randint(2, n_techniques)
+        Steps_sequence = np.random.choice(list(techniques.keys()), sequence_length, replace=False).tolist()
+        Steps_names = [techniques[t] for t in technique_sequence]
+        revenue = np.random.randint(100, 1000, sequence_length).tolist()
+        data.append([customer, segment, technique_sequence, technique_names, revenue])
+    
+    return pd.DataFrame(data, columns=['customer_id', 'customer_segment', 'technique_sequence', 'technique_names', 'revenue'])
+
+df = generate_data()
+
+# view sequence
+Print(technique_sequence)
+
+# Step 2: Extract Sequential Purchase Patterns (Apriori)
+def get_frequent_patterns(df, min_support=0.1):
+    transactions = df['technique_sequence'].tolist()
+    te = pd.DataFrame([[t in transaction for t in sorted(set(sum(transactions, []))) ] for transaction in transactions], columns=sorted(set(sum(transactions, []))))
+    frequent_patterns = apriori(te, min_support=min_support, use_colnames=True)
+    rules = association_rules(frequent_patterns, metric='lift', min_threshold=1)
+    return rules[['antecedents', 'consequents', 'support', 'confidence', 'lift']]
+
+rules = get_frequent_patterns(df)
+print("Frequent Technique Sequences:")
+print(rules.head())
+
+# Step 3: Markov Chain Model for Transition Probabilities (Incorporating Apriori Rules)
+def build_markov_chain(df, rules):
+    transition_counts = defaultdict(lambda: defaultdict(int))
+    transition_probs = defaultdict(lambda: defaultdict(float))
+    rule_dict = {(tuple(a), tuple(c)): conf for a, c, conf in zip(rules['antecedents'], rules['consequents'], rules['confidence'])}
+    
+    for _, row in df.iterrows():
+        sequence = row['technique_sequence']
+        for i in range(len(sequence)-1):
+            transition_counts[sequence[i]][sequence[i+1]] += 1
+    
+    for state, transitions in transition_counts.items():
+        total_transitions = sum(transitions.values())
+        for next_state, count in transitions.items():
+            base_prob = count / total_transitions
+            confidence_boost = rule_dict.get((tuple([state]), tuple([next_state])), 1)
+            transition_probs[state][next_state] = base_prob * confidence_boost
+    
+    return transition_probs
+
+markov_model = build_markov_chain(df, rules)
+
+# Step 4: Predict Next Best Technique with Probability Score
+def predict_next_technique_with_scores(current_technique, markov_model):
+    if current_technique in markov_model:
+        sorted_predictions = sorted(markov_model[current_technique].items(), key=lambda x: x[1], reverse=True)
+        return sorted_predictions
+    return []
+
+# Generate Predictions for All Customers
+predictions = []
+for _, row in df.iterrows():
+    last_technique = row['technique_sequence'][-1]
+    prediction_scores = predict_next_technique_with_scores(last_technique, markov_model)
+    
+    if prediction_scores:
+        best_technique, best_score = prediction_scores[0]
+        next_best_technique, next_best_score = prediction_scores[1] if len(prediction_scores) > 1 else (None, 0)
+    else:
+        best_technique, best_score, next_best_technique, next_best_score = None, 0, None, 0
+    
+    predictions.append([row['customer_id'], best_technique, best_score, next_best_technique, next_best_score])
+
+predictions_df = pd.DataFrame(predictions, columns=['customer_id', 'best_technique', 'best_score', 'next_best_technique', 'next_best_score'])
+
+# Sort predictions by customer_id
+predictions_df = predictions_df.sort_values(by=['customer_id'])
+
+# Write output to CSV
+predictions_df.to_csv("predicted_technique_scores.csv", index=False)
+
+print("Predicted Purchase Probabilities:")
+print(predictions_df.head())
+
+# Mermaid Diagram Representation
+mermaid_diagram = """
+graph TD;
+    A[Start] -->|Generate Data| B[Random Customer & Technique Data]
+    B -->|Apriori Algorithm| C[Extract Purchase Patterns]
+    C -->|Incorporate Confidence Scores| D[Build Markov Chain with Apriori Rules]
+    D -->|Predict Techniques| E[Best & Next Best Technique with Scores]
+"""
+
+print("Mermaid Diagram:")
+print(mermaid_diagram)
