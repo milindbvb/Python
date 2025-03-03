@@ -1,0 +1,115 @@
+import requests
+from bs4 import BeautifulSoup
+import csv
+import time
+import random
+
+# Your list of SKUs
+skus = [
+    "A36227", "A31232", "A14635", "A14525", "A44241", "10584027", "A53037", "14000014", 
+    "88805", "88849", "STM4001PEX", "A29133", "88836", "10001D", "12368010", "4115-1000", 
+    "78609", "A55803", "A50588", "A44240", "88816", "14000013", "88802", "A29131", 
+    "A44116", "10007D", "A33073", "88845", "12369250", "F631S", "NW0412PEX", "A1435103", 
+    "K1081", "78605", "11202D", "A53036", "A29127", "F631L", "5400110", "4115-0125", 
+    "A39247", "78602", "88846", "K830001", "A53038", "K6803", "15544034", "A54071", 
+    "A39248", "1006D", "A31233", "A14697", "X-33", "A54072", "14001013", "78610", 
+    "14001012", "IB31001S", "K174001", "88803", "10003D", "5400920", "90408", "78606", 
+    "A50589", "22711022", "A3767801", "4115-2000", "A53035", "78505", "89821", "A38841", 
+    "89822", "F632L", "12369050", "332260", "V19020", "339653", "88817", "78601", "K1082", 
+    "4115-0250", "K0861", "14001014", "88847", "10712024", "A39250", "A36798", "A3767803", 
+    "SLF2000S", "F631XL", "C606003", "4115-2800", "MPK1025", "88828", "88837", "339651", 
+    "88804", "C607003", "A2910002", "K30001", "12369010", "22700025", "A31217", "A55800", 
+    "12368250", "90409", "MPK10025", "15529019", "A43436", "K210014", "A3767802", "C602003", 
+    "88844", "A38915", "C609601", "A29129", "4115-5000", "A39252", "A39251", "PPMX1000", 
+    "K1071", "12780052", "5400930", "A41249", "A50590", "4115-5001", "A3767804", "88869", 
+    "F632S", "10855001", "78991", "A36797", "4115-0500", "89802", "MPK1096", "78990", 
+    "14000012", "A1435104", "A1374401", "A2910001", "K430001", "88850", "A11154", "88860", 
+    "V19520", "A2910004", "F632XL", "K1072", "88842", "A1435102", "88848", "V35420", 
+    "A1374301", "78503", "A37785", "12368050", "A55802", "GS115", "A14526", "10855021", 
+    "C600003", "78501", "A11156", "22700041", "A14524", "A1374501", "89842", "A29130", 
+    "MPK10096", "C606010", "C601003", "A35243", "A2910003", "A1435101"
+]
+
+def get_product_info(sku):
+    """
+    Extract title and description for a given Thermo Fisher SKU
+    """
+    url = f"https://www.thermofisher.com/order/catalog/product/{sku}"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
+    }
+    
+    try:
+        # Add a randomized delay between 1-3 seconds to avoid rate limiting
+        time.sleep(random.uniform(1, 3))
+        
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Extract title
+        title_element = soup.title
+        title = title_element.text if title_element else "Title not found"
+        
+        # Extract description from meta tag
+        description_meta = soup.find('meta', property='og:description')
+        if description_meta and 'content' in description_meta.attrs:
+            description = description_meta['content']
+        else:
+            # Try alternative description meta tag
+            description_meta_alt = soup.find('meta', attrs={'name': 'description'})
+            description = description_meta_alt['content'] if description_meta_alt and 'content' in description_meta_alt.attrs else "Description not found"
+        
+        print(f"Successfully processed SKU: {sku}")
+        return {
+            'SKU': sku,
+            'Title': title.strip(),
+            'Description': description.strip(),
+            'URL': url
+        }
+    
+    except Exception as e:
+        print(f"Error processing SKU {sku}: {str(e)}")
+        return {
+            'SKU': sku,
+            'Title': "Error occurred",
+            'Description': f"Error: {str(e)}",
+            'URL': url
+        }
+
+def main():
+    # Process each SKU
+    results = []
+    total_skus = len(skus)
+    
+    print(f"Starting to process {total_skus} SKUs...")
+    
+    for i, sku in enumerate(skus):
+        print(f"Processing {i+1}/{total_skus}: SKU {sku}")
+        result = get_product_info(sku)
+        results.append(result)
+        
+        # Save progress after every 10 SKUs (or at the end)
+        if (i + 1) % 10 == 0 or i == total_skus - 1:
+            save_results(results, 'thermo_fisher_products.csv')
+            print(f"Progress saved: {i+1}/{total_skus} SKUs processed")
+    
+    print(f"\nCompleted! All results saved to thermo_fisher_products.csv")
+    
+    # Display preview of results
+    print("\nPreview of first 5 results:")
+    for i, result in enumerate(results[:5]):
+        print(f"\nSKU: {result['SKU']}")
+        print(f"Title: {result['Title']}")
+        print(f"Description: {result['Description'][:100]}..." if len(result['Description']) > 100 else result['Description'])
+
+def save_results(results, filename):
+    """Save results to CSV file"""
+    with open(filename, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=['SKU', 'Title', 'Description', 'URL'])
+        writer.writeheader()
+        writer.writerows(results)
+
+if __name__ == "__main__":
+    main()
