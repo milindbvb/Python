@@ -1,0 +1,31 @@
+import requests
+import json
+
+# Base URL for the USASpending API
+BASE_URL = "https://api.usaspending.gov/api/v2/"
+
+# Define search filters for NIH-related grants
+search_payload = {
+    "filters": {
+        "agencies": [{"type": "awarding", "tier": "subtier", "name": "National Institutes of Health"}],
+        "award_type_codes": ["02", "03", "04", "05"],  # Financial assistance (grants, cooperative agreements, etc.)
+        "time_period": [{"start_date": "2025-03-01", "end_date": "2025-03-31"}]  # Filter for March 2025
+    },
+    "fields": ["Recipient Name", "Award Amount", "Funding Agency", "Award Type", "Award Date"],
+    "page": 1,
+    "limit": 10  # Number of records to fetch per page
+}
+
+# Make API request to search for NIH grants
+headers = {"Content-Type": "application/json"}
+response = requests.post(f"{BASE_URL}search/spending_by_award/", headers=headers, json=search_payload)
+
+def process_response(response):
+    if response.status_code == 200:
+        data = response.json()
+        print(json.dumps(data, indent=4))  # Pretty print the response
+    else:
+        print(f"Error: {response.status_code}", response.text)
+
+# Process the API response
+process_response(response)
